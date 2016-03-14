@@ -1,3 +1,5 @@
+#include "webconn.h"
+#include "cmdparser.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -5,6 +7,8 @@
 #include <unistd.h>
 #include <signal.h>
 #include <libwebsockets.h>
+#include <pthread.h>
+
 
 #define KGRN "\033[0;32;32m"
 #define KCYN "\033[0;36m"
@@ -32,21 +36,21 @@ struct pthread_routine_tool {
 	struct lws *wsi;
 };
 
-static int websocket_write_back(struct lws *wsi_in, char *str, int str_size_in) 
+static int websocket_write_back(struct lws *wsi_in, const char *str, int str_size_in) 
 {
 	if (str == NULL || wsi_in == NULL)
 		return -1;
 
 	int n;
 	int len;
-	char *out = NULL;
+	unsigned char *out = NULL;
 
 	if (str_size_in < 1) 
 		len = strlen(str);
 	else
 		len = str_size_in;
 
-	out = (char *)malloc(sizeof(char)*(LWS_SEND_BUFFER_PRE_PADDING + len + LWS_SEND_BUFFER_POST_PADDING));
+	out = (unsigned char *)malloc(sizeof(char)*(LWS_SEND_BUFFER_PRE_PADDING + len + LWS_SEND_BUFFER_POST_PADDING));
 	//* setup the buffer*/
 	memcpy (out + LWS_SEND_BUFFER_PRE_PADDING, str, len );
 	//* write out*/
@@ -86,10 +90,20 @@ static int ws_service_callback(
 			break;
 
 		case LWS_CALLBACK_CLIENT_RECEIVE:
-			printf(KCYN_L"[Main Service] Client recvived:%s\n"RESET, (char *)in);
+			char *message;
+			message = (char*)in;
+			printf(KCYN_L"[Main Service] Client recvived:%s\n"RESET, message);
 
-			if (writeable_flag)
-				destroy_flag = 1;
+			//if (writeable_flag)
+				//destroy_flag = 1;
+			
+			
+			if (message[0] == 1) {
+				unsigned char cmd = message[1];
+    			unsigned char data = message[2];
+				parseCmd(cmd, data);
+			}
+
 
 			break;
 		case LWS_CALLBACK_CLIENT_WRITEABLE :
@@ -107,7 +121,7 @@ static int ws_service_callback(
 
 static void *pthread_routine(void *tool_in)
 {
-	struct pthread_routine_tool *tool = tool_in;
+	struct pthread_routine_tool *tool = (pthread_routine_tool *)tool_in;
 
 	printf(KBRN"[pthread_routine] Good day. This is pthread_routine.\n"RESET);
 
@@ -131,7 +145,7 @@ static void *pthread_routine(void *tool_in)
 
 }
 
-int main(void)
+int webConn()
 {
 	//* register the signal SIGINT handler */
 	struct sigaction act;
